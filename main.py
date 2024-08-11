@@ -1,13 +1,11 @@
 from win32gui import FindWindow, GetWindowRect
 from PIL import ImageEnhance, ImageOps, Image
-from dataclasses import dataclass
 import pyautogui as pag
 import tkinter as tk
 import keyboard
 import mouse
 import time
 import sys
-
 
 """
 FLAGS:
@@ -24,6 +22,7 @@ WIN_SIZE = (384, 420)
 REPLAY_BTN = (200, 410)
 GAME_END = "end"
 JUMPS = 20
+MIN_NEIGHBOUR_COLORS = 4
 NO_OVERLAY_MODE = "-o" in sys.argv
 
 window_handle = FindWindow(None, "TelegramDesktop")
@@ -91,104 +90,31 @@ def collect_at(x: int, y: int) -> None:
         mouse.move(x, y)
         mouse.click()
         
-      
-@dataclass
-class BombArea:
-    x: int
-    y: int
+     
+def check_neighbours(x: int, y: int, image) -> bool:
+    neighbour_pos = [
+        [x-1, y-1],
+        [x, y-1],
+        [x+1, y-1],
+        [x+1, y],
+        [x+1, y+1],
+        [x, y+1],
+        [x-1, y+1],
+        [x-1, y]
+    ]
     
-    def __hash__(self) -> int:
-        return hash(f"{self.x}.{self.y}")
+    correct = 0
     
-    def __post_init__(self) -> None:
-        self.x += 10
-        self.y -= 10
-        
-        self.x_end = self.x - 28
-        self.y_end = self.y + 40
-        
-        self.xrange = range(self.x_end, self.x)
-        self.yrange = range(self.y, self.y_end)
-        
-    def contains_pos(self, x: int, y: int) -> bool:
-        return x in self.xrange and y in self.yrange
-    
-    def intersects(self, bomb_area: "BombArea") -> bool:
-        if self.x == bomb_area.x and self.y == bomb_area.y:
-            return True
-        
-        for bx in bomb_area.xrange:
-            for by in bomb_area.yrange:
-                if self.contains_pos(bx, by):
-                    return True
-        
-        return False
-    
-
-class BombsContainer:
-    def __init__(self) -> None:
-        self.bombs_pos: set[BombArea] = set()
-        
-    def add_bomb(self, new_bomb: BombArea) -> None:
-        if not self.bombs_pos:
-            self.bombs_pos.add(new_bomb)
-            return
-        
-        intersection = None
-        for bomb in self.bombs_pos:
-            if bomb.intersects(new_bomb):
-                intersection = bomb
-                break
+    for pos in neighbour_pos:
+        if image.getpixel(pos) == POINT_COLOR:
+            correct += 1
             
-        if intersection is None:
-            self.bombs_pos.add(new_bomb)
-            return
+    return correct >= MIN_NEIGHBOUR_COLORS
+          
         
-        # Pick right-top-most bomb area.
-        x_win, x_lost = (bomb, new_bomb) if bomb.x >= new_bomb.x else (new_bomb, bomb)
-        x_diff = x_win.x - x_lost.x
-        
-        y_win, y_lost = (bomb, new_bomb) if bomb.y <= new_bomb.y else (new_bomb, bomb)
-        y_diff = y_lost.y - y_win.y
-        
-        conflict_winner = x_win if x_diff >= y_diff else y_win
-        
-        if conflict_winner == new_bomb:
-            self.bombs_pos.remove(bomb)
-            self.bombs_pos.add(new_bomb)
-            
-    def is_pos_safe(self, xy: list[int, int]) -> bool:
-        x, y = xy
-        
-        for bomb in self.bombs_pos:
-            if bomb.contains_pos(x, y):
-                return False
-        return True
-           
-           
-def detect_bombs(raw_ss: Image.Image) -> BombsContainer:
-    image = ImageOps.posterize(raw_ss, 2)
-    c = ImageEnhance.Contrast(image)
-    image = c.enhance(5)
-    W, H = image.size
-    
-    bombs = BombsContainer()
-    
-    for y in range(0, H-1, 2):
-        for x in range(0, W-1, 2):
-            pos = [x, y]
-            px_color = image.getpixel(pos)
-            
-            if px_color == RED_COLOR:
-                bombs.add_bomb(BombArea(x, y))
-            
-    return bombs
-           
 def get_locations(n=2) -> list | str:
     locs = []
     image = pag.screenshot(region=ss_region)
-
-    # bombs = detect_bombs(image)
 
     image = ImageOps.posterize(image, 1)
     c = ImageEnhance.Contrast(image)
@@ -196,6 +122,7 @@ def get_locations(n=2) -> list | str:
     
     # image.show()
     # exit()
+    image.save("x.png")
     
     if is_end(image):
         return GAME_END
@@ -208,10 +135,13 @@ def get_locations(n=2) -> list | str:
             px_color = image.getpixel(pos)
 
             if px_color == POINT_COLOR:
+                neighbours_status = check_neighbours(x, y, image)
+                if not neighbours_status:
+                    continue
+                
                 locs.append((x, y))
                 
                 if len(locs) >= n:
-                    # locs = list(filter(bombs.is_pos_safe, locs))
                     return locs
     
     return None
