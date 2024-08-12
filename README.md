@@ -21,5 +21,7 @@
 - `-t`: Test mode (only moves mouse pointer on stars, doesn't click)
 
 - `-r`: Repeat mode. Plays another game after finishing.
+
+- `-o`: No overlay mode. **Might fix some issues**
   
   ##### 
