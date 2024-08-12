@@ -14,28 +14,37 @@ FLAGS:
 -o: No overlay mode.
 """
 
+def calc_win_size(rect: list[int, int, int, int]) -> list[int, int]:
+    w = rect[2] - rect[0]
+    h = rect[3] - rect[1]
+    return [int(w / 1.04), int(h / 1.06)]
+
+try:
+    window_handle = FindWindow(None, "TelegramDesktop")
+    window_rect = GetWindowRect(window_handle)
+except:
+    print("Telegram window not found.")
+    exit()
+
 POINT_COLOR = (0, 255, 0)
 WHITE_COLOR = (255, 255, 255)
 RED_COLOR = (255, 0, 0)
 
-WIN_SIZE = (384, 420)
-REPLAY_BTN = (200, 410)
+WIN_SIZE = calc_win_size(window_rect)
 GAME_END = "end"
 JUMPS = 20
-MIN_NEIGHBOUR_COLORS = 4
+MIN_NEIGHBOUR_COLORS = 5
 NO_OVERLAY_MODE = "-o" in sys.argv
+TEST_MODE = "-t" in sys.argv
 
-window_handle = FindWindow(None, "TelegramDesktop")
-window_rect = GetWindowRect(window_handle)
-
-x_offset = window_rect[0] + 10
-y_offset = window_rect[1] + 180
-ss_region = (x_offset, y_offset, WIN_SIZE[0], WIN_SIZE[1])
+x_offset = int(window_rect[0] * 1.02)
+y_offset = int(window_rect[1] * 1.7)
+ss_region = (x_offset, y_offset, int(WIN_SIZE[0] / 1.1), int(WIN_SIZE[1] / 1.4))
 
 if not NO_OVERLAY_MODE:
     overlay_root = tk.Tk()
     overlay_root.title("BlumBot - Autoclicker")
-    overlay_root.geometry(f"{WIN_SIZE[0]+4}x{WIN_SIZE[1] + 234}+{x_offset - 10}+{y_offset - 200}")
+    overlay_root.geometry(f"{WIN_SIZE[0]}x{WIN_SIZE[1]}+{window_rect[0]}+{window_rect[1]}")
     overlay_root.resizable(False, False)
     overlay_root.wm_attributes("-topmost", True)
     overlay_root.wm_attributes('-transparentcolor','#AAA')
@@ -45,7 +54,7 @@ if not NO_OVERLAY_MODE:
     def start_btn_callback():
         start_btn.destroy()
         
-        stop_info_text = tk.Label(overlay_root, text="Press ESC to stop.", bg="white", fg="black", font=("Aerial", 16, "bold"))
+        stop_info_text = tk.Label(overlay_root, text="Hold ESC to stop.", bg="white", fg="black", font=("Aerial", 16, "bold"))
         stop_info_text.pack(pady=10)
         
         overlay_root.update()
@@ -57,8 +66,8 @@ if not NO_OVERLAY_MODE:
 
 
 def is_end(image) -> bool:
-    W, _ = image.size
-    y = 410
+    W, H = image.size
+    y = H - 1
     w_count = 0
     
     for x in range(0, W, 50):
@@ -73,21 +82,21 @@ def is_end(image) -> bool:
 
 
 def press_replay():
-    time.sleep(1)
-    mouse.move(REPLAY_BTN[0] + x_offset, REPLAY_BTN[1] + y_offset)
-    mouse.click()
-    time.sleep(1.5)
+    time.sleep(0.5)
+    mouse.move(200 + x_offset, ss_region[3] - 1 + y_offset)
 
+    if not TEST_MODE:
+        mouse.click()
+
+    time.sleep(1)
 
 def collect_at(x: int, y: int) -> None:
     x += x_offset
     y += y_offset
     
-    if "-t" in sys.argv:
-        mouse.move(x, y)
+    mouse.move(x, y)
         
-    else:
-        mouse.move(x, y)
+    if not TEST_MODE:
         mouse.click()
         
      
@@ -106,9 +115,17 @@ def check_neighbours(x: int, y: int, image) -> bool:
     correct = 0
     
     for pos in neighbour_pos:
-        if image.getpixel(pos) == POINT_COLOR:
+        try:
+            color = image.getpixel(pos)
+        except:
+            continue
+        
+        if color == POINT_COLOR:
             correct += 1
             
+        if color in (RED_COLOR, WHITE_COLOR):
+            return False
+                
     return correct >= MIN_NEIGHBOUR_COLORS
           
         
@@ -119,10 +136,6 @@ def get_locations(n=2) -> list | str:
     image = ImageOps.posterize(image, 1)
     c = ImageEnhance.Contrast(image)
     image = c.enhance(5)
-    
-    # image.show()
-    # exit()
-    image.save("x.png")
     
     if is_end(image):
         return GAME_END
@@ -149,7 +162,7 @@ def get_locations(n=2) -> list | str:
 
 def start_bot():
     games_count = 1
-    print("Started, press [ESC] to stop.")
+    print("Started, hold [ESC] to stop.")
     print(f"Playing game: {games_count}")
     
     while not keyboard.is_pressed("esc"):
