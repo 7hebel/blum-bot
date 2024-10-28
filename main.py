@@ -1,7 +1,8 @@
 from win32gui import FindWindow, GetWindowRect
-from PIL import ImageEnhance, ImageOps, Image
+from PIL import ImageEnhance, ImageOps
+from collections import deque
 import pyautogui as pag
-import tkinter as tk
+import threading
 import keyboard
 import mouse
 import time
@@ -11,7 +12,6 @@ import sys
 FLAGS:
 -t: Test mode (no clicks, only moves mouse)
 -r: Repeat after game ended.
--o: No overlay mode.
 """
 
 def calc_win_size(rect: list[int, int, int, int]) -> list[int, int]:
@@ -26,44 +26,17 @@ except:
     print("Telegram window not found.")
     exit()
 
-POINT_COLOR = (0, 255, 0)
+POINT_COLORS = ((255, 0, 0), (255, 255, 255))
 WHITE_COLOR = (255, 255, 255)
-RED_COLOR = (255, 0, 0)
 
 WIN_SIZE = calc_win_size(window_rect)
 GAME_END = "end"
-JUMPS = 20
-MIN_NEIGHBOUR_COLORS = 5
-NO_OVERLAY_MODE = "-o" in sys.argv
+JUMPS = 30
 TEST_MODE = "-t" in sys.argv
 
 x_offset = int(window_rect[0] * 1.02)
 y_offset = int(window_rect[1] * 1.7)
 ss_region = (x_offset, y_offset, int(WIN_SIZE[0] / 1.1), int(WIN_SIZE[1] / 1.4))
-
-if not NO_OVERLAY_MODE:
-    overlay_root = tk.Tk()
-    overlay_root.title("BlumBot - Autoclicker")
-    overlay_root.geometry(f"{WIN_SIZE[0]}x{WIN_SIZE[1]}+{window_rect[0]}+{window_rect[1]}")
-    overlay_root.resizable(False, False)
-    overlay_root.wm_attributes("-topmost", True)
-    overlay_root.wm_attributes('-transparentcolor','#AAA')
-    overlay_root.config(bg='#AAA')
-    overlay_root.lift()
-
-    def start_btn_callback():
-        start_btn.destroy()
-        
-        stop_info_text = tk.Label(overlay_root, text="Hold ESC to stop.", bg="white", fg="black", font=("Aerial", 16, "bold"))
-        stop_info_text.pack(pady=10)
-        
-        overlay_root.update()
-    
-        start_bot()
-
-    start_btn = tk.Button(overlay_root, text="Start Bot", background="#2dba42", font=("Aerial", 16, 'bold'), fg="white", borderwidth=2, pady=0, padx=12, relief="ridge", command=start_btn_callback)
-    start_btn.pack(pady=10)
-
 
 def is_end(image) -> bool:
     W, H = image.size
@@ -79,7 +52,6 @@ def is_end(image) -> bool:
                 return True
             
     return False
-
 
 def press_replay():
     time.sleep(0.5)
@@ -98,37 +70,7 @@ def collect_at(x: int, y: int) -> None:
         
     if not TEST_MODE:
         mouse.click()
-        
-     
-def check_neighbours(x: int, y: int, image) -> bool:
-    neighbour_pos = [
-        [x-1, y-1],
-        [x, y-1],
-        [x+1, y-1],
-        [x+1, y],
-        [x+1, y+1],
-        [x, y+1],
-        [x-1, y+1],
-        [x-1, y]
-    ]
-    
-    correct = 0
-    
-    for pos in neighbour_pos:
-        try:
-            color = image.getpixel(pos)
-        except:
-            continue
-        
-        if color == POINT_COLOR:
-            correct += 1
-            
-        if color in (RED_COLOR, WHITE_COLOR):
-            return False
-                
-    return correct >= MIN_NEIGHBOUR_COLORS
-          
-        
+
 def get_locations(n=2) -> list | str:
     locs = []
     image = pag.screenshot(region=ss_region)
@@ -144,20 +86,15 @@ def get_locations(n=2) -> list | str:
     
     for y in range(0, H, JUMPS):
         for x in range(0, W, JUMPS):
-            pos = [x, y]
-            px_color = image.getpixel(pos)
+            px_color = image.getpixel([x, y])
 
-            if px_color == POINT_COLOR:
-                neighbours_status = check_neighbours(x, y, image)
-                if not neighbours_status:
-                    continue
-                
+            if px_color in POINT_COLORS:
                 locs.append((x, y))
                 
                 if len(locs) >= n:
                     return locs
     
-    return None
+    return locs
 
 
 def start_bot():
@@ -167,7 +104,7 @@ def start_bot():
     
     while not keyboard.is_pressed("esc"):
         locs = get_locations()
-        if locs is None:
+        if not locs:
             continue
         
         if locs == GAME_END:
@@ -187,18 +124,10 @@ def start_bot():
             
     print("\n\nManual exit...")
 
-    if not NO_OVERLAY_MODE:
-        overlay_root.destroy()
+print("Start Blum drop game and press [space].")
+print("Waiting for [space] press...")
+while not keyboard.is_pressed("space"):
+    pass
 
-
-if not NO_OVERLAY_MODE:
-    overlay_root.mainloop()
-
-if NO_OVERLAY_MODE:
-    print("Start Blum drop game and press [space].")
-    print("Waiting for [space] press...")
-    while not keyboard.is_pressed("space"):
-        pass
-    
-    start_bot()
+start_bot()
     
