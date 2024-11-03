@@ -33,6 +33,7 @@ WIN_SIZE = calc_win_size(window_rect)
 GAME_END = "end"
 JUMPS = 30
 TEST_MODE = "-t" in sys.argv
+BOMB_EFFECT_RED_AMOUNT = 15
 
 x_offset = int(window_rect[0] * 1.02)
 y_offset = int(window_rect[1] * 1.7)
@@ -71,6 +72,20 @@ def collect_at(x: int, y: int) -> None:
     if not TEST_MODE:
         mouse.click()
 
+
+def is_bomb_effect(image) -> bool:
+    W, H = image.size
+    reds = 0
+    
+    for y in range(0, H, JUMPS * 3):
+        for x in range(0, W, JUMPS * 3):
+            px_color = image.getpixel([x, y])
+            if px_color == (255, 0, 0):
+                reds += 1
+                
+    return reds > BOMB_EFFECT_RED_AMOUNT
+
+
 def get_locations(n=2) -> list | str:
     locs = []
     image = pag.screenshot(region=ss_region)
@@ -89,6 +104,9 @@ def get_locations(n=2) -> list | str:
             px_color = image.getpixel([x, y])
 
             if px_color in POINT_COLORS:
+                if is_bomb_effect(image) and px_color == (255, 0, 0):
+                    continue
+                
                 locs.append((x, y))
                 
                 if len(locs) >= n:
